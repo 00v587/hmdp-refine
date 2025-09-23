@@ -2,6 +2,7 @@ package com.hmdp.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.bean.copier.CopyOptions;
+import cn.hutool.core.util.BooleanUtil;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.hmdp.dto.Result;
 import com.hmdp.entity.Shop;
@@ -49,7 +50,92 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
      * @return 商铺详情数据
      */
     @Override
-    public Shop queryById(Long id){
+    public Result queryById(Long id){
+        Shop shop = new Shop();
+
+        //缓存穿透+缓存雪崩
+        //Shop = queryByIdWithPassThrough(id);
+
+        //缓存击穿
+        shop = queryByIdWithMutex(id);
+
+        if (shop == null){
+            return Result.fail("店铺不存在");
+        }
+
+        return Result.ok(shop);
+    }
+
+    /**
+     * 缓存击穿 互斥锁
+     * @param id
+     * @return
+     */
+    private Shop queryByIdWithMutex(Long id) {
+        //1. 查找redis
+        String key = CACHE_SHOP_KEY + id;
+
+        // 缓存存在，返回缓存数据
+        Map<Object, Object> shopMap = stringRedisTemplate.opsForHash().entries(key);
+        if (!shopMap.isEmpty()) {
+            if (shopMap.containsKey("")) {
+                // 空值缓存，说明数据库中也无此数据
+                return null;
+            }
+            // 反序列化hash为对象
+            Shop shop = BeanUtil.mapToBean(shopMap, Shop.class, true, CopyOptions.create());
+            return shop;
+        }
+
+        //3. 缓存不存在 获取锁
+        String lock = LOCK_SHOP_KEY + id;
+        Shop shop = null;
+        try {
+            while (true) {
+                // 使用循环替代递归
+                boolean isLock = tryLock(lock);
+                if (isLock) {
+                    // 4. 获取锁成功，查询数据库
+                    shop = shopMapper.selectById(id);
+
+                    // 模拟重建延时，防止缓存击穿时大量请求同时访问数据库
+                    Thread.sleep(200);
+
+                    // 5. 数据库有，写入redis
+                    if (shop == null) {
+                        // 将空值缓存一段时间，防止缓存穿透
+                        stringRedisTemplate.opsForHash().put(key, "", "");
+                        stringRedisTemplate.expire(key, CACHE_NULL_TTL, TimeUnit.MINUTES);
+                    } else {
+                        // 6. 数据库有，写入redis
+                        Map<String, Object> shopMapForRedis = BeanUtil.beanToMap(shop, new HashMap<>(),
+                                CopyOptions.create()
+                                        .setIgnoreNullValue(true)
+                                        .setFieldValueEditor((fieldName, fieldValue) ->
+                                                fieldValue != null ? fieldValue.toString() : null));
+                        stringRedisTemplate.opsForHash().putAll(key, shopMapForRedis);
+                        stringRedisTemplate.expire(key, CACHE_SHOP_TTL, TimeUnit.MINUTES);
+                    }
+                    break; // 获取锁并处理完成后跳出循环
+                } else {
+                    // 4. 获取锁失败，休眠后重试
+                    Thread.sleep(50);
+                    // 循环继续，再次尝试获取锁
+                }
+            }
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        } finally {
+            //6. 释放锁
+            unLock(lock);
+        }
+        return shop;
+    }
+
+    /**
+     * 缓存穿透和缓存雪崩
+     */
+    public Shop queryByIdWithPassThrough(Long id) {
         //TODO 热点限流
 
         RBloomFilter<Long> shopBloom = redissonClient.getBloomFilter("shop:bloom");
@@ -57,7 +143,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         if (!shopBloom.contains(id)) {
             return null;
         }
-        
+
         // 1. 查询redis
         String key = CACHE_SHOP_KEY + id;
         Map<Object, Object> shopMap = stringRedisTemplate.opsForHash().entries(key);
@@ -111,7 +197,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
                 // 如果转换失败，从数据库查询
             }
         }
-        
+
         // 缓存空对象的情况，直接返回null
         if (shopMap != null && shopMap.containsKey("")) {
             return null;
@@ -141,35 +227,49 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         } catch (Exception e) {
             log.error("写入Redis失败", e);
         }
-
-        // 5. 返回数据
         return shop;
     }
+
 
     /**
      * 新增商铺信息
      * @param shop 商铺数据
      * @return 商铺id
      */
-@Override
-@Transactional
-public Result update(Shop shop) {
-    //1. 更新数据时先更新数据库
-    Long id = shop.getId();
-    if (id == null) {
-        return Result.fail("商铺id不能为空");
+    @Override
+    @Transactional
+    public Result update(Shop shop) {
+        //1. 更新数据时先更新数据库
+        Long id = shop.getId();
+        if (id == null) {
+            return Result.fail("商铺id不能为空");
+        }
+
+        int updateResult = shopMapper.updateById(shop);
+        if (updateResult == 0) {
+            return Result.fail("商铺不存在");
+        }
+
+        //2. 删除缓存
+        String key = CACHE_SHOP_KEY + id;
+        stringRedisTemplate.delete(key);
+
+        //3. 返回结果
+        return Result.ok();
     }
-    
-    int updateResult = shopMapper.updateById(shop);
-    if (updateResult == 0) {
-        return Result.fail("商铺不存在");
+
+    /**
+     * 互斥锁解决缓存击穿（对于某个过期key进行大量访问）
+     */
+    //加锁
+    private boolean tryLock(String key) {
+        Boolean flag = stringRedisTemplate.opsForValue().setIfAbsent(key, "1", 10, TimeUnit.SECONDS);
+        return BooleanUtil.isTrue(flag);
     }
-    
-    //2. 删除缓存
-    String key = CACHE_SHOP_KEY + id;
-    stringRedisTemplate.delete(key);
-    
-    //3. 返回结果
-    return Result.ok();
+    //释放锁
+    private void unLock(String key) {
+        stringRedisTemplate.delete(key);
+    }
+
 }
-}
+
