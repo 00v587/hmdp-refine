@@ -4,7 +4,7 @@ public class RedisConstants {
     public static final String LOGIN_CODE_KEY = "login:code:";
     public static final Long LOGIN_CODE_TTL = 2L;
     public static final String LOGIN_USER_KEY = "login:token:";
-    public static final Long LOGIN_USER_TTL = 36000L;
+    public static final Long LOGIN_USER_TTL = 7200L; // 2小时 = 7200秒，与JWT过期时间保持一致
     public static final String LOGIN_CODE_RATE_LIMIT_KEY = "login:rate_limit:";
     public static final Long RATE_LIMIT_TTL = 1L; // 频率限制1分钟
 

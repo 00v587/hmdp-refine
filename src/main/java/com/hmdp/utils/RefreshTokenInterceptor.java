@@ -5,6 +5,7 @@ import cn.hutool.core.util.StrUtil;
 import com.hmdp.dto.UserDTO;
 import com.hmdp.properties.JwtProperties;
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.ExpiredJwtException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.servlet.HandlerInterceptor;
@@ -89,9 +90,12 @@ public class RefreshTokenInterceptor implements HandlerInterceptor {
             UserHolder.saveUser(userDTO);
 
             // 7. 刷新 token 有效期
-            stringRedisTemplate.expire(key, LOGIN_USER_TTL, TimeUnit.MINUTES);
+            stringRedisTemplate.expire(key, LOGIN_USER_TTL, TimeUnit.SECONDS);
             log.info("token 有效期已刷新");
 
+            return true;
+        } catch (ExpiredJwtException e) {
+            log.warn("token 已过期: {}", e.getMessage());
             return true;
         } catch (Exception e) {
             log.error("token 解析失败", e);

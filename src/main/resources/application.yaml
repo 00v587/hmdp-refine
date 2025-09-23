@@ -11,7 +11,7 @@ spring:
   redis:
     host: localhost
     port: 6381
-    password:
+    database: 0
     lettuce:
       pool:
         max-active: 10
@@ -36,3 +36,6 @@ hm:
     user-secret-key: ThisIsA32BytesLongSecretKeyForHS256
     user-ttl: 7200000
     user-token-name: authorization
+
+redisson:
+  address: redis://localhost:6381

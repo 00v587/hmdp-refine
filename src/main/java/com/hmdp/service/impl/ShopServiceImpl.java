@@ -8,6 +8,8 @@ import com.hmdp.entity.Shop;
 import com.hmdp.mapper.ShopMapper;
 import com.hmdp.service.IShopService;
 import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RBloomFilter;
+import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -19,8 +21,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-import static com.hmdp.utils.RedisConstants.CACHE_SHOP_KEY;
-import static com.hmdp.utils.RedisConstants.CACHE_SHOP_TTL;
+import static com.hmdp.utils.RedisConstants.*;
 
 /**
  * <p>
@@ -39,7 +40,9 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
 
     @Resource
     private StringRedisTemplate stringRedisTemplate;
-
+    
+    @Resource
+    private RedissonClient redissonClient;
     /**
      * 根据id查询商铺信息
      * @param id 商铺id
@@ -47,6 +50,14 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
      */
     @Override
     public Shop queryById(Long id){
+        //TODO 热点限流
+
+        RBloomFilter<Long> shopBloom = redissonClient.getBloomFilter("shop:bloom");
+        // 如果布隆过滤器里不存在，直接返回不存在，避免打到DB
+        if (!shopBloom.contains(id)) {
+            return null;
+        }
+        
         // 1. 查询redis
         String key = CACHE_SHOP_KEY + id;
         Map<Object, Object> shopMap = stringRedisTemplate.opsForHash().entries(key);
@@ -100,11 +111,19 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
                 // 如果转换失败，从数据库查询
             }
         }
+        
+        // 缓存空对象的情况，直接返回null
+        if (shopMap != null && shopMap.containsKey("")) {
+            return null;
+        }
 
         // 3. redis没有，查询数据库
         Shop shop = shopMapper.selectById(id);
         if (shop == null) {
-            return  null;
+            // 将空值缓存一段时间，防止缓存穿透
+            stringRedisTemplate.opsForHash().put(key, "", "");
+            stringRedisTemplate.expire(key, CACHE_NULL_TTL, TimeUnit.MINUTES);
+            return null;
         }
 
         // 4. 数据库有，写入redis（修复存储逻辑）
@@ -116,7 +135,9 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
 
         try {
             stringRedisTemplate.opsForHash().putAll(key, shopMapForRedis);
-            stringRedisTemplate.expire(key, CACHE_SHOP_TTL, TimeUnit.MINUTES);
+            // 使用随机TTL防止缓存雪崩，原始TTL为30分钟，现在在30-60分钟之间随机
+            long randomTtl = CACHE_SHOP_TTL + new java.util.Random().nextInt(30);
+            stringRedisTemplate.expire(key, randomTtl, TimeUnit.MINUTES);
         } catch (Exception e) {
             log.error("写入Redis失败", e);
         }

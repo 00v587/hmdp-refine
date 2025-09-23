@@ -49,8 +49,8 @@ public class MvcConfig implements WebMvcConfigurer {
                         "/upload/**", // 文件上传
                         "/api/blog/hot",// 热门博客
                         "/shop-type/list",
-                        "/blog/hot"// 热门博客
-
+                        "/blog/hot",// 热门博客
+                        "/error" // 错误页面
                 )
                 .order(1);
     }

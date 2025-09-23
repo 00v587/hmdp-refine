@@ -3,6 +3,7 @@ package com.hmdp.controller;
 
 import com.hmdp.dto.LoginFormDTO;
 import com.hmdp.dto.Result;
+import com.hmdp.entity.User;
 import com.hmdp.entity.UserInfo;
 import com.hmdp.service.IUserInfoService;
 import com.hmdp.service.IUserService;
@@ -68,6 +69,17 @@ public class UserController {
         return Result.ok(UserHolder.getUser());
     }
 
+    /**
+     * 根据id查询用户信息
+     * @param id 用户id
+     * @return 用户信息
+     */
+    @GetMapping("/{id}")
+    public Result queryUserById(@PathVariable("id") Long id) {
+        User user = userService.getById(id);
+        return Result.ok(user);
+    }
+    
     @GetMapping("/info/{id}")
     public Result info(@PathVariable("id") Long userId){
         // 查询详情

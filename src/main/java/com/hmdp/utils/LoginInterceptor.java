@@ -15,6 +15,14 @@ public class LoginInterceptor implements HandlerInterceptor {
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
         // 1. 从 ThreadLocal 中获取用户
         UserDTO user = UserHolder.getUser();
+        log.info("LoginInterceptor: 检查请求路径 -> {}", request.getRequestURI());
+        
+        // 特殊处理error路径，总是放行
+        if ("/error".equals(request.getRequestURI())) {
+            log.info("LoginInterceptor: error路径，直接放行");
+            return true;
+        }
+        
         // 2. 判断用户是否存在
         if (user == null) {
             log.info("LoginInterceptor: 用户未登录，拦截 -> {}", request.getRequestURI());

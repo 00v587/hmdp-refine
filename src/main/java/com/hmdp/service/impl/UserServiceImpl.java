@@ -145,7 +145,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         userMap.put("jwttoken",jwttoken);
         redisTemplate.opsForHash().putAll(tokenKey, userMap);
         // 7.5.设置redis中 userId的有效期
-        redisTemplate.expire(tokenKey, LOGIN_USER_TTL, TimeUnit.MINUTES);
+        redisTemplate.expire(tokenKey, LOGIN_USER_TTL, TimeUnit.SECONDS);
 
         return Result.ok(jwttoken);
     }
