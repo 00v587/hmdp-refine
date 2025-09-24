@@ -18,6 +18,12 @@ spring:
         max-idle: 10
         min-idle: 1
         time-between-eviction-runs: 10s
+    redisson:
+      config: |
+        singleServerConfig:
+          address: "redis://localhost:6381"
+          database: 0
+        codec: !<org.redisson.codec.StringCodec> {}
   jackson:
     default-property-inclusion: non_null # JSON处理时忽略非空字段
 mybatis-plus:
@@ -36,6 +42,3 @@ hm:
     user-secret-key: ThisIsA32BytesLongSecretKeyForHS256
     user-ttl: 7200000
     user-token-name: authorization
-
-redisson:
-  address: redis://localhost:6381

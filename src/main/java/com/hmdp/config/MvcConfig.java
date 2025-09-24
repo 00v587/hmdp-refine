@@ -25,7 +25,6 @@ public class MvcConfig implements WebMvcConfigurer {
     // 配置拦截器
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        //拦截所有请求，刷新token有效期
         registry.addInterceptor(new RefreshTokenInterceptor(stringRedisTemplate, jwtProperties))
                 .addPathPatterns("/**")
                 .excludePathPatterns(
@@ -33,24 +32,35 @@ public class MvcConfig implements WebMvcConfigurer {
                         "/index.html",
                         "/css/**",
                         "/js/**",
-                        "/images/**"
-                        // 静态资源
+                        "/images/**",
+                        "/user/code",
+                        "/user/login",
+                        "/upload/**",
+                        "/error"
                 )
                 .order(0);
 
         registry.addInterceptor(new LoginInterceptor())
+                .addPathPatterns("/**")
                 .excludePathPatterns(
+                        // 公开的静态资源
                         "/",
                         "/index.html",
-                        "/user/code", // 登录验证码
-                        "/user/login", // 登录
-                        "/shop/**", // 店铺信息
-                        "/voucher/**", // 代金券相关
-                        "/upload/**", // 文件上传
-                        "/api/blog/hot",// 热门博客
-                        "/shop-type/list",
-                        "/blog/hot",// 热门博客
-                        "/error" // 错误页面
+                        "/css/**",
+                        "/js/**",
+                        "/images/**",
+                        "/upload/**",
+                        "/error",
+
+                        // 公开的API接口
+                        "/user/code",        // 登录验证码
+                        "/user/login",       // 登录
+                        "/shop/**",          // 所有商铺接口（游客可访问）
+                        "/api/shop/**",      // 所有商铺接口
+                        "/voucher/**",       // 代金券相关
+                        "/api/blog/hot",     // 热门博客
+                        "/blog/hot",         // 热门博客
+                        "/shop-type/list"    // 店铺类型列表
                 )
                 .order(1);
     }
