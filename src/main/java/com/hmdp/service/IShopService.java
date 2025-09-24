@@ -27,4 +27,9 @@ public interface IShopService extends IService<Shop> {
      * @return 商铺id
      */
     Result update(Shop shop);
+
+    /**
+     * 缓存预热
+     */
+    void saveShop2Redis(Long id, long l);
 }
