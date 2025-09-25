@@ -1,6 +1,7 @@
 package com.hmdp.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.hmdp.config.RedissonConfig;
 import com.hmdp.dto.Result;
 import com.hmdp.entity.SeckillVoucher;
 import com.hmdp.entity.Voucher;
@@ -11,6 +12,8 @@ import com.hmdp.service.IVoucherOrderService;
 import com.hmdp.utils.RedisIdWorker;
 import com.hmdp.utils.SimpleRedisLock;
 import com.hmdp.utils.UserHolder;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.springframework.aop.framework.AopContext;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -19,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
 import java.time.LocalDateTime;
+import java.util.concurrent.locks.Lock;
 
 /**
  * <p>
@@ -41,16 +45,16 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     @Resource
     private StringRedisTemplate stringRedisTemplate;
 
+    @Resource
+    private RedissonClient redissonClient;
+
     /**
      * 秒杀优惠券
      * @param voucherId 优惠券id
      * @return 订单id
      */
     @Override
-    @Transactional
     public Result seckillVoucher(Long voucherId) {
-        //TODO 超卖+一人一单
-
         // 1. 查优惠券是否存在
         SeckillVoucher voucher = seckillVoucherService.getById(voucherId);
         // 2. 判断优惠券是否存在
@@ -76,9 +80,16 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         Long userId = UserHolder.getUser().getId();
 
         //创建锁对象
-        SimpleRedisLock lock = new SimpleRedisLock("order:" + userId, stringRedisTemplate);
-        // 3. 尝试获取锁
-        boolean isLock = lock.tryLock(1200L);
+        RLock lock = redissonClient.getLock("lock:order:" + userId);
+        // 3. 尝试获取锁，设置等待时间和锁超时时间
+        boolean isLock = false;
+        try {
+            isLock = lock.tryLock(1, 10, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return Result.fail("系统繁忙，请稍后重试");
+        }
+        
         // 3.1 获取锁失败则返回错误
         if(!isLock){
             return Result.fail("您已下单，请勿重复下单");
@@ -89,7 +100,9 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
             return proxy.createVoucherOrder(voucherId);
         }finally {
             // 3.2 释放锁
-            lock.unLock();
+            if (lock.isHeldByCurrentThread()) {
+                lock.unlock();
+            }
         }
     }
 
@@ -101,16 +114,15 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     @Override
     @Transactional
     public Result createVoucherOrder(Long voucherId) {
-
-        // 先查询再扣减库存
-        SeckillVoucher voucher = seckillVoucherService.getById(voucherId);
+        Long userId = UserHolder.getUser().getId();
         
-        // 判断库存是否充足
-        if (voucher.getStock() < 1) {
-            return Result.fail("库存不足");
+        // 1. 查询是否已经下单（一人一单检查）
+        Long count = query().eq("user_id", userId).eq("voucher_id", voucherId).count();
+        if (count > 0) {
+            return Result.fail("您已经购买过该优惠券");
         }
-        
-        // 使用乐观锁更新库存
+
+        // 2. 使用乐观锁更新库存
         boolean success = seckillVoucherService.update()
                 .setSql("stock = stock - 1")
                 .eq("voucher_id", voucherId)
@@ -122,13 +134,13 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
             return Result.fail("库存不足");
         }
         
-        // 3.2 扣减成功则返回订单id
+        // 3.2 扣减成功则创建订单
         VoucherOrder voucherOrder = new VoucherOrder();
-        // 3.1.1 订单id
+        // 3.2.1 订单id
         voucherOrder.setId(redisIdWorker.nextId("order"));
-        // 3.1.2 用户id
-        voucherOrder.setUserId(UserHolder.getUser().getId());
-        // 3.1.3 优惠券id
+        // 3.2.2 用户id
+        voucherOrder.setUserId(userId);
+        // 3.2.3 优惠券id
         voucherOrder.setVoucherId(voucherId);
 
         save(voucherOrder);
