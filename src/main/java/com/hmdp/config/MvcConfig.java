@@ -57,7 +57,7 @@ public class MvcConfig implements WebMvcConfigurer {
                         "/user/login",       // 登录
                         "/shop/**",          // 所有商铺接口（游客可访问）
                         "/api/shop/**",      // 所有商铺接口
-                        "/voucher/**",       // 代金券相关
+                        "/voucher/list/**",       // 代金券相关
                         "/api/blog/hot",     // 热门博客
                         "/blog/hot",         // 热门博客
                         "/shop-type/list"    // 店铺类型列表
