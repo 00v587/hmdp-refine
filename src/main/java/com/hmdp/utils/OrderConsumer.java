@@ -14,10 +14,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
+import com.google.common.util.concurrent.RateLimiter;
 import com.rabbitmq.client.Channel;
 import java.io.IOException;
-
-import static com.hmdp.utils.RedisConstants.SECKILL_STOCK_KEY;
 
 @Slf4j
 @Component
@@ -34,9 +33,15 @@ public class OrderConsumer {
     
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
+    
+    @Autowired
+    private RateLimiter rateLimiter; // 注入限流器
 
     @RabbitListener(queues = "order.queue", concurrency = "5")
     public void handleOrder(OrderMessage msg, Channel channel, Message message) throws IOException {
+        // 使用限流器，控制处理速率
+        rateLimiter.acquire();
+        
         try {
             // 先检查秒杀券是否还有效以及是否有库存
             SeckillVoucher voucher = seckillVoucherService.getById(msg.getVoucherId());
@@ -106,10 +111,10 @@ public class OrderConsumer {
             // 记录日志，做补偿措施
             log.error("下单失败: userId={}, voucherId={}", msg.getUserId(), msg.getVoucherId(), e);
             
-            // 数据库更新失败 恢复Redis库存
+            // 补偿：恢复Redis库存
             try {
                 stringRedisTemplate.opsForValue().increment(
-                        SECKILL_STOCK_KEY + msg.getVoucherId(), 1);
+                    "seckill:stock:" + msg.getVoucherId(), 1);
                 log.info("已恢复Redis库存: userId={}, voucherId={}", 
                     msg.getUserId(), msg.getVoucherId());
             } catch (Exception redisException) {
