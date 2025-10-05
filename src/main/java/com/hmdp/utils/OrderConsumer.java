@@ -11,10 +11,13 @@ import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
 import com.rabbitmq.client.Channel;
 import java.io.IOException;
+
+import static com.hmdp.utils.RedisConstants.SECKILL_STOCK_KEY;
 
 @Slf4j
 @Component
@@ -28,6 +31,9 @@ public class OrderConsumer {
 
     @Autowired
     private RabbitTemplate rabbitTemplate;
+    
+    @Autowired
+    private StringRedisTemplate stringRedisTemplate;
 
     @RabbitListener(queues = "order.queue", concurrency = "5")
     public void handleOrder(OrderMessage msg, Channel channel, Message message) throws IOException {
@@ -99,9 +105,21 @@ public class OrderConsumer {
         } catch (Exception e) {
             // 记录日志，做补偿措施
             log.error("下单失败: userId={}, voucherId={}", msg.getUserId(), msg.getVoucherId(), e);
+            
+            // 数据库更新失败 恢复Redis库存
+            try {
+                stringRedisTemplate.opsForValue().increment(
+                        SECKILL_STOCK_KEY + msg.getVoucherId(), 1);
+                log.info("已恢复Redis库存: userId={}, voucherId={}", 
+                    msg.getUserId(), msg.getVoucherId());
+            } catch (Exception redisException) {
+                log.error("恢复Redis库存失败: userId={}, voucherId={}", 
+                    msg.getUserId(), msg.getVoucherId(), redisException);
+            }
+            
             try {
                 // 拒绝消息并重新入队（最多重新入队一次）
-                channel.basicNack(message.getMessageProperties().getDeliveryTag(), false, false);
+                channel.basicNack(message.getMessageProperties().getDeliveryTag(), false, true);
             } catch (IOException ioException) {
                 log.error("确认消息失败", ioException);
             }

@@ -35,6 +35,8 @@ spring:
       simple:
         prefetch: 10 # 每个消费者最多同时处理10条消息
         acknowledge-mode: manual # 开启手动确认
+        publisher-confirm-type: correlated # 开启publisher confirm机制，并设置confirm类型
+        publisher-returns: true # 开启publisher return机制
 mybatis-plus:
   type-aliases-package: com.hmdp.entity # 别名扫描包
 logging:
