@@ -1,3 +1,5 @@
+package com.hmdp.test;
+
 import com.hmdp.HmDianPingApplication;
 import com.hmdp.service.impl.ShopServiceImpl;
 import org.junit.jupiter.api.Test;

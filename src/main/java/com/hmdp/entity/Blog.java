@@ -69,7 +69,7 @@ public class Blog implements Serializable {
     /**
      * 探店的文字描述
      */
-    private String content;
+    private String content = "";
 
     /**
      * 点赞数量

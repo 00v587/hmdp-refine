@@ -26,6 +26,15 @@ spring:
         codec: !<org.redisson.codec.StringCodec> {}
   jackson:
     default-property-inclusion: non_null # JSON处理时忽略非空字段
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: admin
+    password: 123456
+    listener:
+      simple:
+        prefetch: 10 # 每个消费者最多同时处理10条消息
+        acknowledge-mode: manual # 开启手动确认
 mybatis-plus:
   type-aliases-package: com.hmdp.entity # 别名扫描包
 logging:
@@ -42,3 +51,5 @@ hm:
     user-secret-key: ThisIsA32BytesLongSecretKeyForHS256
     user-ttl: 7200000
     user-token-name: authorization
+  rate-limiter:
+    order-processing: 100

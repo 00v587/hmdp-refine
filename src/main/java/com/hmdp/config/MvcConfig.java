@@ -36,7 +36,10 @@ public class MvcConfig implements WebMvcConfigurer {
                         "/user/code",
                         "/user/login",
                         "/upload/**",
-                        "/error"
+                        "/error",
+                        
+                        // JMeter测试接口
+                        "/test/**"           // 测试接口，用于生成token
                 )
                 .order(0);
 
@@ -60,7 +63,10 @@ public class MvcConfig implements WebMvcConfigurer {
                         "/voucher/list/**",       // 代金券相关
                         "/api/blog/hot",     // 热门博客
                         "/blog/hot",         // 热门博客
-                        "/shop-type/list"    // 店铺类型列表
+                        "/shop-type/list",   // 店铺类型列表
+                        
+                        // JMeter测试接口
+                        "/test/**"           // 测试接口，用于生成token
                 )
                 .order(1);
     }
