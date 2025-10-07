@@ -1,4 +1,4 @@
-package com.hmdp.utils;
+package com.hmdp.utils.constans;
 
 public class SystemConstants {
     public static final String IMAGE_UPLOAD_DIR = "E:\\javaProject\\hmdp\\hmdp-fronted\\html\\hmdp\\imgs\\";

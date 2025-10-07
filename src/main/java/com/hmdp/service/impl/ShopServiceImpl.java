@@ -1,24 +1,21 @@
 package com.hmdp.service.impl;
 
-import cn.hutool.core.bean.BeanUtil;
-import cn.hutool.core.bean.copier.CopyOptions;
 import cn.hutool.core.date.DatePattern;
-import cn.hutool.core.util.BooleanUtil;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.github.benmanes.caffeine.cache.Cache;
 import com.hmdp.dto.Result;
 import com.hmdp.entity.Shop;
 import com.hmdp.mapper.ShopMapper;
 import com.hmdp.service.IShopService;
 import com.hmdp.utils.CacheClient;
 import com.hmdp.utils.CacheStorageStrategy;
-import com.hmdp.utils.RedisData;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RBloomFilter;
 import org.redisson.api.RedissonClient;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,12 +24,11 @@ import javax.annotation.Resource;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-import static com.hmdp.utils.RedisConstants.*;
+import static com.hmdp.utils.constans.RedisConstants.*;
 
 /**
  * <p>
@@ -54,12 +50,18 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
     
     @Resource
     private RedissonClient redissonClient;
+    
+    @Autowired
+    private RabbitTemplate rabbitTemplate;
 
     private final CacheClient cacheClient;
 
     public ShopServiceImpl(@Lazy CacheClient cacheClient) {
         this.cacheClient = cacheClient;
     }
+
+    @Resource
+    private Cache<String, Object> caffeineCache;
 
     private static final ExecutorService CACHE_REBUILD_EXECUTOR = Executors.newFixedThreadPool(10);
     /**
@@ -77,25 +79,36 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
             return Result.fail("店铺不存在");
         }
 
-        //缓存穿透+缓存雪崩
-//        Shop shop = cacheClient
-//                .queryByIdWithPassThrough(CACHE_SHOP_KEY, id, Shop.class, this::getById, CACHE_SHOP_TTL, TimeUnit.MINUTES, CacheStorageStrategy.HASH);
+        // 从caffeine缓存中获取数据
+        Shop cafeshop = (Shop) caffeineCache.getIfPresent(CACHE_SHOP_KEY + id);
+        if (cafeshop != null) {
+            // 检查是否是空值标记
+            if (cafeshop.getId() == null) {
+                return Result.fail("店铺不存在");
+            }
+            
+            log.debug("从caffeine缓存中获取数据");
+            return Result.ok(cafeshop);
+        }
 
-        //互斥锁解决缓存击穿
-        //Shop shop = queryByIdWithMutex(id);
-
-        //逻辑过期解决缓存击穿
+        // 逻辑过期解决缓存击穿
         Shop shop = cacheClient
                 .queryWithLogicalExpire(CACHE_SHOP_KEY, id, Shop.class, this::getById, CACHE_SHOP_TTL, TimeUnit.MINUTES, CacheStorageStrategy.HASH);
 
+        // 如果缓存中没有数据，直接查询数据库
         if (shop == null){
-            return Result.fail("店铺不存在");
+            shop = this.getById(id);
+            if (shop == null) {
+                // 将空值也缓存到Caffeine中，防止缓存穿透
+                caffeineCache.put(CACHE_SHOP_KEY + id, new Shop());
+                return Result.fail("店铺不存在");
+            }
         }
 
+        //缓存数据到caffeine
+        caffeineCache.put(CACHE_SHOP_KEY + id, shop);
         return Result.ok(shop);
     }
-
-
 
     /**
      * 缓存击穿 互斥锁
@@ -275,12 +288,8 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         if (updateResult == 0) {
             return Result.fail("商铺不存在");
         }
-
-        //2. 删除缓存
-        String key = CACHE_SHOP_KEY + id;
-        stringRedisTemplate.delete(key);
-
-        //3. 返回结果
+        //3. canal监听更新缓存
+        //4. 返回结果
         return Result.ok();
     }
 
@@ -308,6 +317,14 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         String key = CACHE_SHOP_KEY + id;
         stringRedisTemplate.delete(key);
         stringRedisTemplate.opsForHash().putAll(key, cacheData);
-        stringRedisTemplate.expire(key, CACHE_SHOP_TTL + 60, TimeUnit.MINUTES);
+        
+        // 5. 设置过期时间，使用expireSeconds参数转换为分钟
+        long expireMinutes = expireSeconds / 60;
+        if (expireSeconds % 60 > 0) {
+            expireMinutes++; // 如果有余数，向上取整
+        }
+        stringRedisTemplate.expire(key, expireMinutes, TimeUnit.MINUTES);
+        
+        log.info("店铺数据已写入Redis，key: {}, 过期时间: {}分钟", key, expireMinutes);
     }
 }

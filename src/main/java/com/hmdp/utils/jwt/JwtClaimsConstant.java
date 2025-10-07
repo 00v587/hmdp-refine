@@ -1,4 +1,4 @@
-package com.hmdp.utils;
+package com.hmdp.utils.jwt;
 
 public class JwtClaimsConstant {
     public static final String EMP_ID = "empId";

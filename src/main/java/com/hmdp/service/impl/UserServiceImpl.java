@@ -11,12 +11,11 @@ import com.hmdp.entity.User;
 import com.hmdp.mapper.UserMapper;
 import com.hmdp.properties.JwtProperties;
 import com.hmdp.service.IUserService;
-import com.hmdp.utils.JwtClaimsConstant;
-import com.hmdp.utils.JwtUtil;
+import com.hmdp.utils.jwt.JwtClaimsConstant;
+import com.hmdp.utils.jwt.JwtUtil;
 import com.hmdp.utils.RegexUtils;
 import com.hmdp.utils.UserHolder;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.connection.BitFieldSubCommands;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -30,11 +29,10 @@ import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.concurrent.TimeUnit;
 
-import static com.hmdp.utils.RedisConstants.*;
-import static com.hmdp.utils.SystemConstants.USER_NICK_NAME_PREFIX;
+import static com.hmdp.utils.constans.RedisConstants.*;
+import static com.hmdp.utils.constans.SystemConstants.USER_NICK_NAME_PREFIX;
 
 /**
  * <p>

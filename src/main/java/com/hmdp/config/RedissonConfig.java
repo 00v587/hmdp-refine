@@ -3,26 +3,29 @@ package com.hmdp.config;
 import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
 import org.redisson.config.Config;
-import org.springframework.boot.autoconfigure.data.redis.RedisProperties;
+import org.redisson.config.SentinelServersConfig;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
+
+import java.util.List;
 
 @Configuration
 public class RedissonConfig {
 
-    @Bean
-    public RedissonClient redissonClient(RedisProperties redisProperties) {
+    @Bean(destroyMethod = "shutdown")
+    @Primary  // 确保这个bean优先使用
+    public RedissonClient redisson() {
         Config config = new Config();
-        String address = "redis://" + redisProperties.getHost() + ":" + redisProperties.getPort();
-        config.useSingleServer()
-                .setAddress(address)
-                .setDatabase(redisProperties.getDatabase());
-        
-        // 如果Redis设置了密码，需要设置密码
-        if (redisProperties.getPassword() != null) {
-            config.useSingleServer().setPassword(redisProperties.getPassword());
-        }
-        
+
+        config.useSentinelServers()
+                .setMasterName("mymaster")
+                .setCheckSentinelsList(false)  // 关键：禁用哨兵列表检查
+                .addSentinelAddress("redis://127.0.0.1:26379")
+                .addSentinelAddress("redis://127.0.0.1:26380")
+                .addSentinelAddress("redis://127.0.0.1:26381");
+
         return Redisson.create(config);
     }
 }

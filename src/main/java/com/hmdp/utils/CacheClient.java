@@ -9,13 +9,11 @@ import cn.hutool.core.date.DatePattern;
 import java.time.format.DateTimeFormatter;
 
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Component;
 
-import javax.annotation.Resource;
 import java.lang.reflect.Field;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -28,7 +26,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
-import static com.hmdp.utils.RedisConstants.LOCK_SHOP_KEY;
+import static com.hmdp.utils.constans.RedisConstants.LOCK_SHOP_KEY;
 
 @Slf4j
 @Component
@@ -157,7 +155,7 @@ public class CacheClient {
             Function<ID, R> dbFallback,
             Long time,
             TimeUnit unit,
-            CacheStorageStrategy strategy) {  // 新增：存储策略参数
+            CacheStorageStrategy strategy) {  //存储策略参数
 
         // 1. 查询redis
         String key = keyPrefix + id;
@@ -327,50 +325,64 @@ public class CacheClient {
     }
 
     private <R, ID> R queryWithLogicalExpireStringStrategy(String key, ID id, Class<R> type, Function<ID,R> dbFallback, Long expireTime, TimeUnit unit) {
+        try {
+            // 1. 从Redis查询缓存
+            Map<Object, Object> cacheMap = stringRedisTemplate.opsForHash().entries(key);
 
-        // 1. 从Redis查询缓存
-        Map<Object, Object> cacheMap = stringRedisTemplate.opsForHash().entries(key);
+            // 2. 缓存不存在
+            if (cacheMap.isEmpty()) {
+                return null;
+            }
 
-        // 2. 缓存不存在
-        if (cacheMap.isEmpty()) {
+            // 3. 检查是否是空值缓存
+            if (cacheMap.containsKey("_NULL_")) {
+                return null;
+            }
+
+            // 4. 检查是否是逻辑过期格式
+            if (cacheMap.containsKey("expireTime") && cacheMap.containsKey("data")) {
+                return handleLogicalExpireFormat(cacheMap, key, id, type, dbFallback, expireTime, unit);
+            } else {
+                // 处理传统格式并异步转换
+                return handleLegacyFormat(cacheMap, key, id, type, dbFallback, expireTime, unit);
+            }
+        } catch (Exception e) {
+            // 处理Redis数据类型不匹配等异常
+            log.warn("Redis缓存读取异常，可能由于数据类型不匹配，key: {}", key, e);
+            // 清理异常的key
+            stringRedisTemplate.delete(key);
             return null;
-        }
-
-        // 3. 检查是否是空值缓存
-        if (cacheMap.containsKey("_NULL_")) {
-            return null;
-        }
-
-        // 4. 检查是否是逻辑过期格式
-        if (cacheMap.containsKey("expireTime") && cacheMap.containsKey("data")) {
-            return handleLogicalExpireFormat(cacheMap, key, id, type, dbFallback, expireTime, unit);
-        } else {
-            // 处理传统格式并异步转换
-            return handleLegacyFormat(cacheMap, key, id, type, dbFallback, expireTime, unit);
         }
     }
 
     private <R, ID> R queryWithLogicalExpireHashStrategy(String key, ID id, Class<R> type, Function<ID,R> dbFallback, Long expireTime, TimeUnit unit) {
+        try {
+            // 1. 从Redis查询缓存
+            Map<Object, Object> cacheMap = stringRedisTemplate.opsForHash().entries(key);
 
-        // 1. 从Redis查询缓存
-        Map<Object, Object> cacheMap = stringRedisTemplate.opsForHash().entries(key);
+            // 2. 缓存不存在
+            if (cacheMap.isEmpty()) {
+                return null;
+            }
 
-        // 2. 缓存不存在
-        if (cacheMap.isEmpty()) {
+            // 3. 检查是否是空值缓存
+            if (cacheMap.containsKey("_NULL_")) {
+                return null;
+            }
+
+            // 4. 检查是否是逻辑过期格式
+            if (cacheMap.containsKey("expireTime") && cacheMap.containsKey("data")) {
+                return handleLogicalExpireFormat(cacheMap, key, id, type, dbFallback, expireTime, unit);
+            } else {
+                // 处理传统格式并异步转换
+                return handleLegacyFormat(cacheMap, key, id, type, dbFallback, expireTime, unit);
+            }
+        } catch (Exception e) {
+            // 处理Redis数据类型不匹配等异常
+            log.warn("Redis缓存读取异常，可能由于数据类型不匹配，key: {}", key, e);
+            // 清理异常的key
+            stringRedisTemplate.delete(key);
             return null;
-        }
-
-        // 3. 检查是否是空值缓存
-        if (cacheMap.containsKey("_NULL_")) {
-            return null;
-        }
-
-        // 4. 检查是否是逻辑过期格式
-        if (cacheMap.containsKey("expireTime") && cacheMap.containsKey("data")) {
-            return handleLogicalExpireFormat(cacheMap, key, id, type, dbFallback, expireTime, unit);
-        } else {
-            // 处理传统格式并异步转换
-            return handleLegacyFormat(cacheMap, key, id, type, dbFallback, expireTime, unit);
         }
     }
 

@@ -1,9 +1,12 @@
-package com.hmdp.utils;
+package com.hmdp.utils.interceptor;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.StrUtil;
 import com.hmdp.dto.UserDTO;
 import com.hmdp.properties.JwtProperties;
+import com.hmdp.utils.UserHolder;
+import com.hmdp.utils.jwt.JwtClaimsConstant;
+import com.hmdp.utils.jwt.JwtUtil;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import lombok.extern.slf4j.Slf4j;
@@ -15,8 +18,8 @@ import javax.servlet.http.HttpServletResponse;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-import static com.hmdp.utils.RedisConstants.LOGIN_USER_KEY;
-import static com.hmdp.utils.RedisConstants.LOGIN_USER_TTL;
+import static com.hmdp.utils.constans.RedisConstants.LOGIN_USER_KEY;
+import static com.hmdp.utils.constans.RedisConstants.LOGIN_USER_TTL;
 
 @Slf4j
 public class RefreshTokenInterceptor implements HandlerInterceptor {

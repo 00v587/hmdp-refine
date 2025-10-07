@@ -1,10 +1,10 @@
-package com.hmdp.utils;
+package com.hmdp.utils.consumer;
 
 import com.hmdp.entity.SeckillVoucher;
 import com.hmdp.service.ISeckillVoucherService;
 import com.hmdp.service.IVoucherOrderService;
-import com.hmdp.utils.OrderMessage;
 
+import com.hmdp.utils.message.OrderMessage;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.amqp.core.Message;
@@ -38,7 +38,16 @@ public class OrderConsumer {
     private RateLimiter rateLimiter; // 注入限流器
 
     @RabbitListener(queues = "order.queue", concurrency = "5")
-    public void handleOrder(OrderMessage msg, Channel channel, Message message) throws IOException {
+    public void handleMessage(Object msg, Channel channel, Message message) throws IOException {
+        if (msg instanceof OrderMessage) {
+            handleOrderMessage((OrderMessage) msg, channel, message);
+        }else {
+            log.warn("未知消息类型: {}", msg.getClass().getName());
+            channel.basicAck(message.getMessageProperties().getDeliveryTag(), false);
+        }
+    }
+    
+    public void handleOrderMessage(OrderMessage msg, Channel channel, Message message) throws IOException {
         // 使用限流器，控制处理速率
         rateLimiter.acquire();
         
@@ -129,5 +138,5 @@ public class OrderConsumer {
                 log.error("确认消息失败", ioException);
             }
         }
-    }
+        }
 }

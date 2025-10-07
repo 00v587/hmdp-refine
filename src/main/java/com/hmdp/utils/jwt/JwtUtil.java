@@ -1,4 +1,4 @@
-package com.hmdp.utils;
+package com.hmdp.utils.jwt;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtBuilder;

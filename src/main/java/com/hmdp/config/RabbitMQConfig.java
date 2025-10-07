@@ -6,6 +6,8 @@ import org.springframework.amqp.core.DirectExchange;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
+import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
+import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -50,5 +52,14 @@ public class RabbitMQConfig {
         factory.setPrefetchCount(10); // 每次预取10条消息
         factory.setConcurrentConsumers(5); // 并发消费者数量
         return factory;
+    }
+    
+    /**
+     * 配置JSON消息转换器
+     * @return
+     */
+    @Bean
+    public MessageConverter messageConverter() {
+        return new Jackson2JsonMessageConverter();
     }
 }

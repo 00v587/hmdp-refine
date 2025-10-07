@@ -7,12 +7,11 @@ import org.springframework.data.geo.Point;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
 import javax.annotation.Resource;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static com.hmdp.utils.RedisConstants.SHOP_GEO_KEY;
+import static com.hmdp.utils.constans.RedisConstants.SHOP_GEO_KEY;
 
 @SpringBootTest(classes = HmDianPingApplication.class)
 public class SomeTest {

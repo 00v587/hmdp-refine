@@ -6,7 +6,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hmdp.dto.Result;
 import com.hmdp.entity.Shop;
 import com.hmdp.service.IShopService;
-import com.hmdp.utils.SystemConstants;
+import com.hmdp.utils.constans.SystemConstants;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
@@ -56,8 +56,8 @@ public class ShopController {
      */
     @PutMapping
     public Result updateShop(@RequestBody Shop shop) {
-        // 写入数据库 更新时 先更新数据库 再删除缓存
-        return Result.ok(shopService.update(shop));
+        // 写入数据库
+        return shopService.update(shop);
     }
 
     /**
@@ -96,5 +96,24 @@ public class ShopController {
                 .page(new Page<>(current, SystemConstants.MAX_PAGE_SIZE));
         // 返回数据
         return Result.ok(page.getRecords());
+    }
+
+    /**
+     * 缓存预热 - 将店铺数据保存到Redis
+     * @param id 商铺id
+     * @param expireSeconds 过期时间(秒)
+     * @return 操作结果
+     */
+    @PostMapping("/saveToRedis/{id}")
+    public Result saveShopToRedis(
+            @PathVariable("id") Long id,
+            @RequestParam(value = "expireSeconds", defaultValue = "20") Long expireSeconds
+    ) {
+        try {
+            shopService.saveShop2Redis(id, expireSeconds);
+            return Result.ok("店铺数据已成功保存到Redis");
+        } catch (Exception e) {
+            return Result.fail("保存店铺数据到Redis失败: " + e.getMessage());
+        }
     }
 }

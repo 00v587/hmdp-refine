@@ -1,4 +1,4 @@
-import com.hmdp.utils.JwtUtil;
+import com.hmdp.utils.jwt.JwtUtil;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import org.junit.jupiter.api.Assertions;

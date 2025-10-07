@@ -1,4 +1,4 @@
-package com.hmdp.utils;
+package com.hmdp.utils.bloom;
 
 import com.hmdp.mapper.SeckillVoucherMapper;
 import com.hmdp.mapper.ShopMapper;

@@ -1,4 +1,4 @@
-package com.hmdp.utils;
+package com.hmdp.utils.generator;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.bean.copier.CopyOptions;
@@ -6,12 +6,13 @@ import com.hmdp.dto.UserDTO;
 import com.hmdp.entity.User;
 import com.hmdp.mapper.UserMapper;
 import com.hmdp.properties.JwtProperties;
+import com.hmdp.utils.jwt.JwtClaimsConstant;
+import com.hmdp.utils.jwt.JwtUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 
-import javax.annotation.PostConstruct;
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -20,8 +21,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-import static com.hmdp.utils.RedisConstants.LOGIN_USER_KEY;
-import static com.hmdp.utils.RedisConstants.LOGIN_USER_TTL;
+import static com.hmdp.utils.constans.RedisConstants.LOGIN_USER_KEY;
+import static com.hmdp.utils.constans.RedisConstants.LOGIN_USER_TTL;
 
 /**
  * Token生成器 - 用于JMeter性能测试

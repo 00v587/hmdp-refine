@@ -1,7 +1,7 @@
 package com.hmdp.controller;
 
 import com.hmdp.dto.Result;
-import com.hmdp.utils.TokenGenerator;
+import com.hmdp.utils.generator.TokenGenerator;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
