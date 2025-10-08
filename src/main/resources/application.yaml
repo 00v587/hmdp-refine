@@ -60,8 +60,8 @@ spring:
         publisher-returns: true # 开启publisher return机制
   elasticsearch:
     uris: http://127.0.0.1:9200
-    username: 
-    password:
+    username: elastic
+    password: changeme
 mybatis-plus:
   type-aliases-package: com.hmdp.entity # 别名扫描包
 logging:

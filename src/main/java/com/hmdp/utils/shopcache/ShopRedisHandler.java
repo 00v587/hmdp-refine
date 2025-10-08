@@ -41,18 +41,24 @@ public class ShopRedisHandler implements InitializingBean {
 
     @Override
     public void afterPropertiesSet() throws Exception {
-        // 初始化缓存
-        // 1.查询商品信息
-        List<Shop> shopList = shopService.list();
-        // 2.放入缓存
-        for (Shop shop : shopList) {
-            // 2.1.item序列化为JSON
-            String json = MAPPER.writeValueAsString(shop);
-            // 2.2 存入caffeind
-            String key = CACHE_SHOP_KEY + shop.getId();
-            shopCache.put(key, shop);
-            // 2.2.存入redis
-            stringRedisTemplate.opsForValue().set(key, json);
+        try {
+            // 初始化缓存
+            // 1.查询商品信息
+            List<Shop> shopList = shopService.list();
+            // 2.放入缓存
+            for (Shop shop : shopList) {
+                // 2.1.item序列化为JSON
+                String json = MAPPER.writeValueAsString(shop);
+                // 2.2 存入caffeind
+                String key = CACHE_SHOP_KEY + shop.getId();
+                shopCache.put(key, shop);
+                // 2.2.存入redis
+                stringRedisTemplate.opsForValue().set(key, json);
+            }
+        } catch (Exception e) {
+            // 如果出现任何异常（如表不存在），只打印日志，不中断应用启动
+            System.err.println("缓存预热失败: " + e.getMessage());
+            e.printStackTrace();
         }
 
 //        // 3.查询商品库存信息

@@ -2,15 +2,31 @@ package com.hmdp.service.impl;
 
 import cn.hutool.core.date.DatePattern;
 import cn.hutool.json.JSONUtil;
+import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.hmdp.dto.Result;
+import com.hmdp.dto.ShopVO;
 import com.hmdp.entity.Shop;
 import com.hmdp.mapper.ShopMapper;
 import com.hmdp.service.IShopService;
 import com.hmdp.utils.CacheClient;
 import com.hmdp.utils.CacheStorageStrategy;
+import com.hmdp.utils.es.ShopDocument;
+import com.hmdp.utils.es.ShopSyncService;
 import lombok.extern.slf4j.Slf4j;
+import org.elasticsearch.action.index.IndexRequest;
+import org.elasticsearch.action.search.SearchRequest;
+import org.elasticsearch.action.search.SearchResponse;
+import org.elasticsearch.client.RequestOptions;
+import org.elasticsearch.client.RestHighLevelClient;
+import org.elasticsearch.common.unit.DistanceUnit;
+import org.elasticsearch.index.query.BoolQueryBuilder;
+import org.elasticsearch.index.query.QueryBuilders;
+import org.elasticsearch.search.SearchHit;
+import org.elasticsearch.search.builder.SearchSourceBuilder;
+import org.elasticsearch.search.sort.SortBuilders;
+import org.elasticsearch.search.sort.SortOrder;
 import org.redisson.api.RBloomFilter;
 import org.redisson.api.RedissonClient;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -21,8 +37,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
+import java.io.IOException;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -53,6 +72,12 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
     
     @Autowired
     private RabbitTemplate rabbitTemplate;
+
+    @Resource
+    private ShopSyncService shopSyncService;
+    
+    @Resource
+    private RestHighLevelClient esClient;
 
     private final CacheClient cacheClient;
 
@@ -293,7 +318,6 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         return Result.ok();
     }
 
-
     /**
      * 缓存预热
      */
@@ -327,4 +351,139 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         
         log.info("店铺数据已写入Redis，key: {}, 过期时间: {}分钟", key, expireMinutes);
     }
+
+    /**
+     * 搜索附近商铺信息
+     * @param type 商铺类型
+     * @param sort 排序字段
+     * @param lat 纬度
+     * @param lon 经度
+     * @param page 页码
+     * @param size 页大小
+     * @return 搜索结果
+     */
+    @Override
+    public Result searchShops(String type, String sort, Double lat, Double lon, Integer page, Integer size) throws IOException {
+        SearchRequest request = new SearchRequest("shops"); // 索引名
+        SearchSourceBuilder builder = new SearchSourceBuilder();
+
+        // 1. 分类过滤
+        BoolQueryBuilder bool = QueryBuilders.boolQuery();
+        if (type != null && !type.isEmpty()) {
+            // 使用term查询精确匹配typeId
+            try {
+                Long typeId = Long.parseLong(type);
+                bool.filter(QueryBuilders.termQuery("typeId", typeId));
+            } catch (NumberFormatException e) {
+                // 如果转换失败，不添加typeId过滤条件
+                log.warn("无法将type参数 '{}' 解析为数字，将忽略type过滤条件", type);
+            }
+        }
+
+        builder.query(bool);
+
+        // 2. 排序逻辑
+        if ("distance".equals(sort) && lat != null && lon != null) {
+            builder.sort(SortBuilders.geoDistanceSort("location", lat, lon)
+                    .order(SortOrder.ASC)
+                    .unit(DistanceUnit.KILOMETERS));
+        } else if ("score".equals(sort)) {
+            builder.sort("score", SortOrder.DESC);
+        } else if ("sold".equals(sort)) {
+            builder.sort("sold", SortOrder.DESC);
+        } else if ("comments".equals(sort)) {
+            builder.sort("comments", SortOrder.DESC);
+        }
+
+        // 3. 分页
+        builder.from((page - 1) * size);
+        builder.size(size);
+
+        request.source(builder);
+        SearchResponse response = esClient.search(request, RequestOptions.DEFAULT);
+
+// 4. 解析结果
+        List<ShopVO> shops = new ArrayList<>();
+        for (SearchHit hit : response.getHits()) {
+            // 获取源数据
+            Map<String, Object> sourceMap = hit.getSourceAsMap();
+            ShopVO shop = new ShopVO();
+
+            // 手动映射字段，确保数据正确转换
+            shop.setId(getLongValue(sourceMap, "id"));
+            shop.setName(getStringValue(sourceMap, "name"));
+            shop.setTypeId(getLongValue(sourceMap, "typeId"));
+            shop.setImages(getStringValue(sourceMap, "images"));
+            shop.setArea(getStringValue(sourceMap, "area"));
+            shop.setAddress(getStringValue(sourceMap, "address"));
+
+            // 从location字段解析经纬度
+            String location = getStringValue(sourceMap, "location");
+            if (location != null && !location.isEmpty()) {
+                String[] coords = location.split(",");
+                if (coords.length == 2) {
+                    try {
+                        shop.setX(Double.parseDouble(coords[1])); // 经度
+                        shop.setY(Double.parseDouble(coords[0])); // 纬度
+                    } catch (NumberFormatException e) {
+                        log.warn("解析经纬度失败: {}", location);
+                    }
+                }
+            }
+
+            shop.setAvgPrice(getLongValue(sourceMap, "avgPrice"));
+            shop.setSold(getIntegerValue(sourceMap, "sold"));
+            shop.setComments(getIntegerValue(sourceMap, "comments"));
+            shop.setScore(getIntegerValue(sourceMap, "score"));
+            shop.setOpenHours(getStringValue(sourceMap, "openHours"));
+
+            // 如果是距离排序，取出距离信息
+            if (hit.getSortValues().length > 0 && "distance".equals(sort)) {
+                shop.setDistance((double) hit.getSortValues()[0]);
+            }
+            shops.add(shop);
+        }
+
+        return Result.ok(shops);
+
+    }
+
+    // 辅助方法：安全获取Long值
+    private Long getLongValue(Map<String, Object> map, String key) {
+        Object value = map.get(key);
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number) {
+            return ((Number) value).longValue();
+        }
+        try {
+            return Long.parseLong(value.toString());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    // 辅助方法：安全获取Integer值
+    private Integer getIntegerValue(Map<String, Object> map, String key) {
+        Object value = map.get(key);
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number) {
+            return ((Number) value).intValue();
+        }
+        try {
+            return Integer.parseInt(value.toString());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    // 辅助方法：安全获取String值
+    private String getStringValue(Map<String, Object> map, String key) {
+        Object value = map.get(key);
+        return value != null ? value.toString() : null;
+    }
+
 }

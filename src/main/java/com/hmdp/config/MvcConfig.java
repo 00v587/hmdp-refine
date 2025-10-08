@@ -36,6 +36,7 @@ public class MvcConfig implements WebMvcConfigurer {
                         "/user/code",
                         "/user/login",
                         "/upload/**",
+                        "/shop/**",
                         "/error",
                         
                         // JMeter测试接口
@@ -64,6 +65,10 @@ public class MvcConfig implements WebMvcConfigurer {
                         "/api/blog/hot",     // 热门博客
                         "/blog/hot",         // 热门博客
                         "/shop-type/list",   // 店铺类型列表
+                        "/shops/**",        // 所有商铺接口（游客可访问）
+
+
+
                         
                         // JMeter测试接口
                         "/test/**"           // 测试接口，用于生成token

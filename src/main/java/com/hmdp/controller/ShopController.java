@@ -7,9 +7,13 @@ import com.hmdp.dto.Result;
 import com.hmdp.entity.Shop;
 import com.hmdp.service.IShopService;
 import com.hmdp.utils.constans.SystemConstants;
+import com.hmdp.utils.es.ShopSearchService;
+import org.elasticsearch.action.search.SearchResponse;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
+import java.io.IOException;
 
 /**
  * <p>
@@ -115,5 +119,22 @@ public class ShopController {
         } catch (Exception e) {
             return Result.fail("保存店铺数据到Redis失败: " + e.getMessage());
         }
+    }
+
+    /**
+     * 搜索附近商铺信息
+     * @param
+     * @return 搜索结果
+     */
+    @GetMapping("/search")
+    public Result searchShops(
+            @RequestParam String type,
+            @RequestParam(required = false) String sort,
+            @RequestParam(required = false) Double lat,
+            @RequestParam(required = false) Double lon,
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "10") Integer size) throws IOException {
+
+        return shopService.searchShops(type, sort, lat, lon, page, size);
     }
 }
